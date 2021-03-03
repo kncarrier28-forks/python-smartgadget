@@ -30,10 +30,10 @@ def detection_callback(device, advertisement_data):
 
 async def scan():
     scanner = BleakScanner()
-    scanner.register_detection_callback(detection_callback)
+    # scanner.register_detection_callback(detection_callback)
 
     await scanner.start()
-    await asyncio.sleep(3.0)
+    await asyncio.sleep(5.0)
     await scanner.stop()
     return await scanner.get_discovered_devices()
 
@@ -55,7 +55,7 @@ class HumiGadget:
     BAT_FORMAT = ['time', 'battery']
     SHTC1_NAME = 'SHTC1 smart gadget'
     SHT3X_NAME = 'Smart Humigadget'
-    GADGET_NAMES = [SHTC1_NAME, SHT3X_NAME]
+    GADGET_NAMES = [SHT3X_NAME]
 
     BAT_SRVC_UUID = '0000180f-0000-1000-8000-00805f9b34fb'
     BAT_CHAR_UUID = '00002a19-0000-1000-8000-00805f9b34fb'
@@ -68,14 +68,7 @@ class HumiGadget:
 
     @staticmethod
     def create(device, client=None, loop=None):
-        """Factory method for creating a humigadget from a BLE Device"""
-        if device.name == HumiGadget.SHTC1_NAME:
-            return SHTC1HumiGadget(device, client, loop)
-
-        if device.name == HumiGadget.SHT3X_NAME:
             return SHT3xHumiGadget(device, client, loop)
-
-        return None
 
     def __init__(self, device, client=None, loop=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -130,7 +123,6 @@ class HumiGadget:
         """
         try:
             data = await self._client.read_gatt_char(uuid)
-            print("Read_characteristic ", uuid, unpack, data)
 
         except Exception:
             log.exception("Exception in read_characteristic: %s", uuid)
@@ -207,8 +199,11 @@ class HumiGadget:
         humi = self.humidity
         if humi is None:
             return None
-        return dict(zip(self.RHT_FORMAT, (humi['time'], temp['temperature'],
-                                          humi['humidity'])))
+        return {
+                    'time': temp['time'],
+                    'humidity': humi['humidity'],
+                    'temperature': temp['temperature']
+                }
 
     @property
     def temperature(self):
@@ -399,48 +394,15 @@ def main():
     loop = asyncio.get_event_loop()
     device_array = loop.run_until_complete(scan())
     devices = HumiGadget.filter_smartgadgets(device_array)
-
-    # # # Manually set devices
-    # devices = [
-    # #     {'Address': 'BC:6A:29:C1:B4:D1', 'Name': 'SHTC1'},
-    # #    {'Address': 'DC:01:F6:33:D7:42', 'Name': 'Smart Humigadget'}
-    # {'Name': 'Smart Humigadget', 'Paired': False, 'ServicesResolved':
-    #          False, 'Adapter': '/org/bluez/hci0', 'Appearance': 512,
-    #          'LegacyPairing': False, 'Alias': 'Smart Humigadget',
-    #          'Connected': False, 'UUIDs':
-    #          ['00001234-b38d-4985-720e-0f993a68ee41',
-    #              '00001800-0000-1000-8000-00805f9b34fb',
-    #              '00001801-0000-1000-8000-00805f9b34fb',
-    #              '0000180a-0000-1000-8000-00805f9b34fb',
-    #              '0000180f-0000-1000-8000-00805f9b34fb',
-    #              '00002234-b38d-4985-720e-0f993a68ee41',
-    #              '0000f234-b38d-4985-720e-0f993a68ee41'], 'Address':
-    #          'DC:01:F6:33:D7:42', 'Trusted': False, 'Blocked': False}
-    # ]
-
-    for dev in devices:
+    if (len(devices) == 0) :
+        print("Device Not Found.")
+    else : 
+        dev = devices[0]
         print("{}: {}".format(dev.name, dev.address))
-        #try:
         with HumiGadget.create(dev, loop=loop) as gadget:
-            print("Connected ... rssi, bat, rht, log intv")
-            print(gadget.rssi)
-            print(gadget.battery)
-            print(gadget.humidity_and_temperature)
-
-            if isinstance(gadget, SHT3xHumiGadget):
-                print(gadget.log_interval)
-
-            # # print("Setting log interval (erases log)")
-            # # gadget.log_interval = 5000
-            # print("Subscribing")
-            # gadget.subscribe(lambda rht: print(rht))
-            # time.sleep(70)
-
-        #except KeyboardInterrupt:
-        #    break
-        #except Exception as e:
-        #    print(e)
-        #    raise e
+            print("Reading...")
+            stats = gadget.humidity_and_temperature
+            print('Temperature: {0} C'.format(stats['temperature']))
 
 
 if __name__ == '__main__':
